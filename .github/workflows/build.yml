@@ -11,15 +11,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Debug directory structure
+      - name: Debug directory
         run: |
           echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
           echo "pwd=$(pwd)"
-          echo ""
-          echo "=== ls -la ==="
           ls -la
-          echo ""
-          echo "=== find project.yml ==="
           find . -name "project.yml" -type f 2>/dev/null
 
       - name: Install XcodeGen
@@ -27,13 +23,14 @@ jobs:
 
       - name: Generate Xcode project
         run: |
-          # Find project.yml and cd to its directory
-          PROJECT_YML=$(find . -name "project.yml" -type f | head -1)
-          if [ -z "$PROJECT_YML" ]; then
-            echo "ERROR: project.yml not found!"
-            exit 1
-          fi
-          echo "Found project.yml at: $PROJECT_YML"
-          cd "$(dirname "$PROJECT_YML")"
-          echo "Now in: $(pwd)"
+          echo "=== BEFORE cd ==="
+          pwd
+          ls -la
+          echo "=== Running xcodegen in MengXueStar/ ==="
+          cd MengXueStar
+          echo "=== AFTER cd ==="
+          pwd
+          ls -la
           xcodegen generate
+          echo "=== xcodegen done ==="
+          ls -la *.xcodeproj/ 2>/dev/null && echo "SUCCESS" || echo "FAILED"
