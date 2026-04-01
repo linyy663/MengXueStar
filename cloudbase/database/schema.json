@@ -1,0 +1,143 @@
+{
+  "collections": {
+    "users": {
+      "schema": {
+        "bsonType": "object",
+        "required": ["phone", "createdAt"],
+        "properties": {
+          "phone": { "bsonType": "string", "description": "手机号" },
+          "nickname": { "bsonType": "string", "description": "家长昵称" },
+          "children": {
+            "bsonType": "array",
+            "items": {
+              "bsonType": "objectId",
+              "description": "关联的孩子ID数组"
+            }
+          },
+          "createdAt": { "bsonType": "date", "description": "注册时间" }
+        }
+      }
+    },
+
+    "children": {
+      "schema": {
+        "bsonType": "object",
+        "required": ["name", "age", "grade", "parentId", "createdAt"],
+        "properties": {
+          "name": { "bsonType": "string", "description": "孩子姓名" },
+          "avatar": { "bsonType": "string", "description": "头像: fox/rabbit/panda/cat" },
+          "age": { "bsonType": "int", "description": "年龄" },
+          "grade": { "bsonType": "string", "description": "年级" },
+          "level": { "bsonType": "string", "description": "学习水平: easy/normal/hard" },
+          "totalPoints": { "bsonType": "int", "description": "总积分", "default": 0 },
+          "consecutiveDays": { "bsonType": "int", "description": "连续打卡天数", "default": 0 },
+          "badges": {
+            "bsonType": "array",
+            "items": {
+              "bsonType": "object",
+              "properties": {
+                "id": { "bsonType": "string" },
+                "earnedAt": { "bsonType": "date" }
+              }
+            },
+            "description": "已获得勋章列表"
+          },
+          "parentId": { "bsonType": "objectId", "description": "家长用户ID" },
+          "parentControl": {
+            "bsonType": "object",
+            "properties": {
+              "dailyTimeLimitMinutes": { "bsonType": "int", "default": 60 },
+              "allowedTimeStart": { "bsonType": "string", "default": "07:00" },
+              "allowedTimeEnd": { "bsonType": "string", "default": "21:00" },
+              "isTimeLimitEnabled": { "bsonType": "bool", "default": false },
+              "isTimeRangeEnabled": { "bsonType": "bool", "default": false },
+              "subjectsEnabled": {
+                "bsonType": "array",
+                "items": { "bsonType": "string" },
+                "default": ["语文", "数学", "英语", "思维", "写字"]
+              },
+              "isNotificationsEnabled": { "bsonType": "bool", "default": true }
+            },
+            "description": "家长控制设置"
+          },
+          "createdAt": { "bsonType": "date" },
+          "updatedAt": { "bsonType": "date" }
+        }
+      }
+    },
+
+    "checkin_records": {
+      "schema": {
+        "bsonType": "object",
+        "required": ["childId", "date"],
+        "properties": {
+          "childId": { "bsonType": "objectId", "description": "孩子ID" },
+          "date": { "bsonType": "date", "description": "打卡日期" },
+          "completedCourses": { "bsonType": "int", "description": "完成的科目数" },
+          "totalCourses": { "bsonType": "int", "description": "总科目数" },
+          "pointsEarned": { "bsonType": "int", "description": "获得积分" },
+          "stars": { "bsonType": "int", "description": "获得的星星数 1-3" },
+          "answers": {
+            "bsonType": "array",
+            "items": {
+              "bsonType": "object",
+              "properties": {
+                "questionId": { "bsonType": "string" },
+                "answer": { "bsonType": "string" },
+                "isCorrect": { "bsonType": "bool" },
+                "points": { "bsonType": "int" }
+              }
+            }
+          }
+        }
+      },
+      "indexes": [
+        { "fields": ["childId", "date"], "unique": true }
+      ]
+    },
+
+    "daily_tasks": {
+      "schema": {
+        "bsonType": "object",
+        "required": ["childId", "date", "courses"],
+        "properties": {
+          "childId": { "bsonType": "objectId", "description": "孩子ID" },
+          "date": { "bsonType": "date", "description": "任务日期" },
+          "courses": {
+            "bsonType": "array",
+            "items": {
+              "bsonType": "object",
+              "properties": {
+                "id": { "bsonType": "string" },
+                "subject": { "bsonType": "string" },
+                "questions": { "bsonType": "array" }
+              }
+            }
+          },
+          "totalMinutes": { "bsonType": "int", "default": 30 },
+          "generatedBy": { "bsonType": "string", "description": "AI/Manual" }
+        }
+      },
+      "indexes": [
+        { "fields": ["childId", "date"], "unique": true }
+      ]
+    },
+
+    "sms_codes": {
+      "schema": {
+        "bsonType": "object",
+        "required": ["phone", "code", "expiresAt"],
+        "properties": {
+          "phone": { "bsonType": "string" },
+          "code": { "bsonType": "string" },
+          "expiresAt": { "bsonType": "date" },
+          "used": { "bsonType": "bool", "default": false },
+          "createdAt": { "bsonType": "date" }
+        }
+      },
+      "indexes": [
+        { "fields": ["phone", "code"], "unique": true }
+      ]
+    }
+  }
+}

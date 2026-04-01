@@ -1,0 +1,104 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'testflight'
+        type: choice
+        options:
+          - testflight
+          - ad-hoc
+
+env:
+  BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
+  CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: |
+          which xcodegen || brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+        working-directory: ./MengXueStar
+
+      - name: Create signing directory
+        run: mkdir -p signing
+
+      - name: Decode P12 certificate
+        run: |
+          echo "${{ secrets.P12_CERTIFICATE }}" | base64 --decode -o signing/distribution.p12
+          echo "Certificate decoded successfully"
+
+      - name: Decode provisioning profile
+        run: |
+          echo "${{ secrets.PROVISIONING_PROFILE }}" | base64 --decode -o signing/profile.mobileprovision
+          echo "Provisioning profile decoded successfully"
+
+      - name: Import certificate to Keychain
+        run: |
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 8)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security import signing/distribution.p12 -k build.keychain -P "${{ env.CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          echo "keychain_password=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
+
+      - name: Get provisioning profile UUID
+        run: |
+          UUID=$(security cms -D -i signing/profile.mobileprovision | grep -o '<key>UUID</key><string>[^<]*</string>' | sed 's/<key>UUID<\/key><string>//;s/<\/string>//')
+          echo "profile_uuid=$UUID" >> $GITHUB_ENV
+          echo "Found provisioning profile UUID: $UUID"
+
+      - name: Install provisioning profile
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp signing/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/${{ env.profile_uuid }}.mobileprovision
+          echo "Provisioning profile installed"
+
+      - name: Update ExportOptions.plist
+        run: |
+          sed -i '' "s/YOUR_BUNDLE_ID/${{ env.BUNDLE_ID }}/g" ios/ExportOptions.plist
+          sed -i '' "s/YOUR_PROFILE_UUID/${{ env.profile_uuid }}/g" ios/ExportOptions.plist
+
+      - name: Build IPA
+        run: |
+          xcodebuild -workspace MengXueStar/MengXueStar.xcworkspace \
+            -scheme MengXueStar \
+            -configuration Release \
+            -archivePath build/MengXueStar.xcarchive \
+            -exportArchive \
+            -exportOptionsPlist ios/ExportOptions.plist \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="iPhone Distribution" \
+            PROVISIONING_PROFILE="${{ env.profile_uuid }}" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            DEVELOPMENT_TEAM="" \
+            PRODUCT_BUNDLE_IDENTIFIER="${{ env.BUNDLE_ID }}"
+        working-directory: ./MengXueStar
+
+      - name: Verify IPA exists
+        run: |
+          ls -la MengXueStar/build/*.ipa
+          echo "IPA built successfully!"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MengXueStar-IPA
+          path: MengXueStar/build/*.ipa
+          retention-days: 7
+
+      - name: Cleanup Keychain
+        if: always()
+        run: security delete-keychain build.keychain
