@@ -32,7 +32,7 @@ targets:
     deploymentTarget: "15.0"
 
     sources:
-      - path: MengXueStar
+      - path: .
         excludes:
           - "**/.DS_Store"
 
