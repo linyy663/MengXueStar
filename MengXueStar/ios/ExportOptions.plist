@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>app-store</string>
+	<key>signingStyle</key>
+	<string>manual</string>
+	<key>signingCertificate</key>
+	<string>iPhone Distribution: Xiamen Zhuyue Network Technology Co., Ltd. (3DNNPB4YM6)</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.lunar.study</key>
+		<string>5b361701-8750-4ed5-9e87-45fea801e395</string>
+	</dict>
+	<key>teamId</key>
+	<string>3DNNPB4YM6</string>
+	<key>stripSwiftSymbols</key>
+	<true/>
+	<key>uploadBitcode</key>
+	<false/>
+</dict>
+</plist>
