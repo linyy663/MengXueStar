@@ -6,9 +6,6 @@ on:
 jobs:
   build:
     runs-on: macos-14
-    defaults:
-      run:
-        working-directory: MengXueStar
 
     steps:
       - name: Checkout code
@@ -18,11 +15,25 @@ jobs:
         run: |
           echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
           echo "pwd=$(pwd)"
-          echo "ls -la:"
+          echo ""
+          echo "=== ls -la ==="
           ls -la
           echo ""
-          echo "ls -la MengXueStar/:"
-          ls -la MengXueStar/ || echo "MengXueStar/ not found"
-          echo ""
-          echo "find . -name project.yml:"
+          echo "=== find project.yml ==="
           find . -name "project.yml" -type f 2>/dev/null
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: |
+          # Find project.yml and cd to its directory
+          PROJECT_YML=$(find . -name "project.yml" -type f | head -1)
+          if [ -z "$PROJECT_YML" ]; then
+            echo "ERROR: project.yml not found!"
+            exit 1
+          fi
+          echo "Found project.yml at: $PROJECT_YML"
+          cd "$(dirname "$PROJECT_YML")"
+          echo "Now in: $(pwd)"
+          xcodegen generate
