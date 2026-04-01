@@ -15,7 +15,7 @@ on:
 env:
   BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
   CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  NODE_OPTIONS: '--max-old-space-size=4096'
 
 jobs:
   build:
@@ -25,7 +25,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: |
+          which xcodegen || brew install xcodegen
 
       - name: Generate Xcode project
         run: xcodegen generate
@@ -34,21 +35,48 @@ jobs:
       - name: Create signing directory
         run: mkdir -p MengXueStar/signing
 
+      - name: Write P12 secret to file
+        run: |
+          echo "$P12_CERTIFICATE" > MengXueStar/signing/p12_b64.txt
+        env:
+          P12_CERTIFICATE: ${{ secrets.P12_CERTIFICATE }}
+
       - name: Decode P12 certificate
         run: |
-          $content = [System.IO.File]::ReadAllText("${{ github.workspace }}/MengXueStar/ios/Signing/p12_base64.txt")
-          $content = $content.Trim() -replace '\s+', ''
-          [System.IO.File]::WriteAllText("p12_b64.txt", $content)
-          certutil -decode p12_b64.txt MengXueStar/signing/distribution.p12
-          echo "Certificate decoded"
+          tr -d ' \n' < MengXueStar/signing/p12_b64.txt > MengXueStar/signing/p12_clean.txt
+          cat MengXueStar/signing/p12_clean.txt | base64 -d > MengXueStar/signing/distribution.p12
+          ls -la MengXueStar/signing/distribution.p12
+
+      - name: Write Provisioning Profile secret to file
+        run: |
+          echo "$PROVISIONING_PROFILE" > MengXueStar/signing/prov_b64.txt
+        env:
+          PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
 
       - name: Decode provisioning profile
         run: |
-          $content = [System.IO.File]::ReadAllText("${{ github.workspace }}/MengXueStar/ios/Signing/prov_base64.txt")
-          $content = $content.Trim()
-          [System.IO.File]::WriteAllText("prov_b64.txt", $content)
-          certutil -decode prov_b64.txt MengXueStar/signing/profile.mobileprovision
-          echo "Provisioning profile decoded"
+          cat MengXueStar/signing/prov_b64.txt | base64 -d > MengXueStar/signing/profile.mobileprovision
+          ls -la MengXueStar/signing/profile.mobileprovision
+
+      - name: Extract provisioning profile info
+        id: prov_info
+        run: |
+          # Extract UUID from mobileprovision plist
+          UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" MengXueStar/signing/profile.mobileprovision 2>/dev/null)
+          if [ -z "$UUID" ]; then
+            UUID=$(security cms -D -i MengXueStar/signing/profile.mobileprovision | grep -o '<key>UUID</key><string>[^<]*</string>' | sed 's/.*<key>UUID<\/key><string>\([^<]*\)<\/string>.*/\1/')
+          fi
+
+          # Extract Team ID
+          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" MengXueStar/signing/profile.mobileprovision 2>/dev/null)
+          if [ -z "$TEAM_ID" ]; then
+            TEAM_ID=$(security cms -D -i MengXueStar/signing/profile.mobileprovision | grep -o '<key>TeamIdentifier</key><array><string>[^<]*</string>' | sed 's/.*<string>\([^<]*\)<\/string>.*/\1/')
+          fi
+
+          echo "profile_uuid=$UUID"
+          echo "team_id=$TEAM_ID"
+          echo "profile_uuid=$UUID" >> $GITHUB_OUTPUT
+          echo "team_id=$TEAM_ID" >> $GITHUB_OUTPUT
 
       - name: Import certificate to Keychain
         run: |
@@ -56,43 +84,39 @@ jobs:
           security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain-db
           security set-keychain-settings -lut 21600 build.keychain-db
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain-db
-          security import signing/distribution.p12 -k build.keychain-db -P "${{ env.CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productsign -T /usr/bin/xcodebuild
+          security import MengXueStar/signing/distribution.p12 -k build.keychain-db -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productsign -T /usr/bin/xcodebuild
           security set-key-partition-list -S "apple-tool:,apple:,codesign:,xcode:" -s -k "$KEYCHAIN_PASSWORD" build.keychain-db
-          echo "keychain_password=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
-          echo "keychain_db_path=${{ github.workspace }}/MengXueStar/build.keychain-db" >> $GITHUB_ENV
           security list-keychains -s build.keychain-db
           security default-keychain -s build.keychain-db
-
-      - name: Get provisioning profile info
-        id: prov_info
-        run: |
-          PROV_FILE="${{ github.workspace }}/MengXueStar/signing/profile.mobileprovision"
-          UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$PROV_FILE" 2>/dev/null || security cms -D -i "$PROV_FILE" | grep -o '<key>UUID</key><string>[^<]*</string>' | sed 's/.*<string>\(.*\)<\/string>.*/\1/')
-          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" "$PROV_FILE" 2>/dev/null || security cms -D -i "$PROV_FILE" | grep -o '<key>TeamIdentifier</key><array><string>[^<]*</string>' | sed 's/.*<string>\(.*\)<\/string>.*/\1/')
-          echo "profile_uuid=$UUID" >> $GITHUB_OUTPUT
-          echo "team_id=$TEAM_ID" >> $GITHUB_OUTPUT
-          echo "Found UUID: $UUID, TeamID: $TEAM_ID"
+          echo "Certificate imported to keychain"
+        env:
+          CERTIFICATE_PASSWORD: ${{ env.CERTIFICATE_PASSWORD }}
 
       - name: Install provisioning profile
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp signing/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/${{ steps.prov_info.outputs.profile_uuid }}.mobileprovision
+          cp MengXueStar/signing/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/${{ steps.prov_info.outputs.profile_uuid }}.mobileprovision
           echo "Provisioning profile installed"
 
       - name: Update ExportOptions.plist
         run: |
-          sed -i '' "s/YOUR_BUNDLE_ID/${{ env.BUNDLE_ID }}/g" ios/ExportOptions.plist
+          sed -i '' "s/YOUR_BUNDLE_ID/$BUNDLE_ID/g" ios/ExportOptions.plist
           sed -i '' "s/YOUR_PROFILE_UUID/${{ steps.prov_info.outputs.profile_uuid }}/g" ios/ExportOptions.plist
           sed -i '' "s/YOUR_TEAM_ID/${{ steps.prov_info.outputs.team_id }}/g" ios/ExportOptions.plist
+          echo "=== Updated ExportOptions.plist ==="
           cat ios/ExportOptions.plist
+        env:
+          BUNDLE_ID: ${{ env.BUNDLE_ID }}
 
-      - name: List generated project files
+      - name: List project files
         run: |
+          echo "=== Workspace contents ==="
           ls -la MengXueStar/
-          ls -la MengXueStar/*.xcodeproj 2>/dev/null || echo "No xcodeproj found"
-          ls -la MengXueStar/*.xcworkspace 2>/dev/null || echo "No xcworkspace found"
+          echo "=== Project files ==="
+          ls -la MengXueStar/*.xcodeproj 2>/dev/null || echo "No .xcodeproj"
+          ls -la MengXueStar/*.xcworkspace 2>/dev/null || echo "No .xcworkspace"
 
-      - name: Build IPA (xcodeproj)
+      - name: Build archive
         run: |
           xcodebuild -project MengXueStar/MengXueStar.xcodeproj \
             -scheme MengXueStar \
@@ -104,20 +128,20 @@ jobs:
             PROVISIONING_PROFILE="${{ steps.prov_info.outputs.profile_uuid }}" \
             DEVELOPMENT_TEAM="${{ steps.prov_info.outputs.team_id }}" \
             PRODUCT_BUNDLE_IDENTIFIER="${{ env.BUNDLE_ID }}"
-        working-directory: ./MengXueStar
 
       - name: Export IPA
         run: |
           xcodebuild -exportArchive \
-            -archivePath build/MengXueStar.xcarchive \
-            -exportOptionsPlist ios/ExportOptions.plist \
-            -exportPath build/output
-        working-directory: ./MengXueStar
+            -archivePath MengXueStar/build/MengXueStar.xcarchive \
+            -exportOptionsPlist MengXueStar/ios/ExportOptions.plist \
+            -exportPath MengXueStar/build/output
 
       - name: Verify and rename IPA
         run: |
-          ls -la build/output/*.ipa 2>/dev/null && mv build/output/*.ipa build/MengXueStar.ipa && echo "IPA ready" || echo "No IPA found"
-        working-directory: ./MengXueStar
+          ls -la MengXueStar/build/output/
+          cp MengXueStar/build/output/*.ipa MengXueStar/build/MengXueStar.ipa 2>/dev/null || ls MengXueStar/build/output/*.ipa
+          ls -la MengXueStar/build/*.ipa
+          echo "IPA ready for download!"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
