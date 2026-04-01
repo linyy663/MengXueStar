@@ -13,26 +13,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          path: ./MengXueStar
 
-      - name: Show directory structure
+      - name: Debug directory structure
         run: |
-          echo "=== GITHUB_WORKSPACE ==="
-          echo "$GITHUB_WORKSPACE"
-          echo "=== Current working dir ==="
-          pwd
-          echo "=== List MengXueStar/ ==="
-          ls -la MengXueStar/
-          echo "=== project.yml exists? ==="
-          test -f MengXueStar/project.yml && echo "YES: MengXueStar/project.yml" || echo "NO"
-          test -f project.yml && echo "YES: project.yml at current dir" || echo "NO"
-
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
-      - name: Generate Xcode project
-        run: |
-          xcodegen generate
-          echo "=== After xcodegen ==="
-          ls -la *.xcodeproj/ 2>/dev/null && echo "xcodeproj found" || echo "xcodeproj missing"
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          echo "pwd=$(pwd)"
+          echo "ls -la:"
+          ls -la
+          echo ""
+          echo "ls -la MengXueStar/:"
+          ls -la MengXueStar/ || echo "MengXueStar/ not found"
+          echo ""
+          echo "find . -name project.yml:"
+          find . -name "project.yml" -type f 2>/dev/null
