@@ -6,15 +6,22 @@ on:
 jobs:
   build:
     runs-on: macos-14
+    defaults:
+      run:
+        working-directory: ./MengXueStar
+
     steps:
-      - name: Debug environment
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Debug - List files
         run: |
-          echo "=== Workflow triggered ==="
-          echo "Workspace: $GITHUB_WORKSPACE"
-          echo "Event: $GITHUB_EVENT_NAME"
-          echo "=== Git status ==="
-          git status
-          echo "=== MengXueStar dir ==="
-          ls -la MengXueStar/ 2>/dev/null || echo "MengXueStar dir missing"
-          echo "=== project.yml ==="
-          cat MengXueStar/project.yml 2>/dev/null | head -20 || echo "project.yml missing"
+          echo "Current dir: $(pwd)"
+          ls -la
+          ls -la *.xcodeproj/ 2>/dev/null || echo "No xcodeproj found"
